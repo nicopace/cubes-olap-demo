@@ -1,4 +1,0 @@
-sqlalchemy
-werkzeug
-jinja2
-
