@@ -1,4 +1,4 @@
-Cubes - Online Analytical Processing Framework for Python
+Cubes Demo - Online Analytical Processing Framework for Python, and CubesViewer
 =========================================================
 
 About
@@ -8,14 +8,13 @@ Cubes is a light-weight Python framework and set of tools for Online
 Analytical Processing (OLAP), multidimensional analysis and browsing of
 aggregated data. 
 
-*Focus on data analysis, in human way*
+CubesViewer is a visual, web-based tool application for exploring and 
+analyzing data. CubesViewer can be used for data exploration and data auditory,
+generation of reports, chart design and embedding, and as a (simple) 
+company-wide analytics application. The complete application has more features 
+than the ones shown here.
 
-Purpose is to provide a framework for giving analyst or any application 
-end-user understandable and natural way of presenting the multidimensional 
-data. One of the main features is the logical model, which serves as 
-abstraction over physical data to provide end-user layer.
-
-Features:
+Features of Cubes:
 
 * OLAP and aggregated browsing (default backend is for relational databse - 
   ROLAP)
@@ -27,65 +26,49 @@ Features:
 * localizable metadata and data
 * OLAP server (WSGI HTTP server with JSON API based on Wergzeug)
 
-Documentation
--------------
-
-Documentation can be found at: http://packages.python.org/cubes
-
-See `examples` directory for simple examples and use-cases. Also see:
-
-    https://github.com/stiivi/cubes-examples
-    
-for more complex examples.
-
+Features of CubesViewer:
+* Cube explorer providing drilldown and cut operations.
+* Supports dimension hierarchies and date filtering.
+* Several charts and diagrams can be created.
+* View management, cloning, saving and sharing.
+* User Interface allows for multiple views on-screen. 
+* Multiple modes: explore, data series, chart, facts. 
+* Undo / Redo.
+* Multi-user.
+* Shared wiki notes system to annotate cubes and views.
+* Views can be embedded in other web sites.
+* Modular and extensible.
 
 Source
 ------
 
-Github source repository: https://github.com/Stiivi/cubes
+Cubes Github source repository: https://github.com/Stiivi/cubes
+CubesViewer Github source repository: https://github.com/jjmontesl/cubesviewer
 
-Requirements
-------------
+Install
+-------
 
-Developed using python 2.7.
+<pre>
+pip install -r requirements-all.txt
+</pre>
 
-Most of the requirements are soft (optional) and need to be satisfied only if 
-certain parts of cubes are being used.
+Run slicer server:
+<pre>
+slicer serve slicer.ini
+</pre>
 
-* SQLAlchemy from http://www.sqlalchemy.org/ version >= 0.7.4 - for SQL
-  backend
-* Werkzeug from http://werkzeug.pocoo.org/ for Slicer server
-* Jinja2 from http://jinja.pocoo.org/docs/ for HTML presenters
+Install django server:
+<pre>
+cd ./cubesviewer/src/web/cvapp/
+python manage.py syncdb
+</pre>
 
-Support
-=======
+Run django server:
+<pre>
+python manage.py runserver
+</pre>
 
-If you have questions, problems or suggestions, you can send a message to the 
-Google group or write to the author.
-
-* Google group: http://groups.google.com/group/cubes-discuss
-* IRC channel #databrewery on server irc.freenode.net
-
-Report bugs using github issue tracking: https://github.com/Stiivi/cubes/issues
-
-Development
------------
-
-If you are browsing the code and you find something that:
-
-* is over-complicated or not obvious
-* is redundant
-* can be done in better Python-way
-
-... please let it be known.
-
-Authors
-=======
-
-Cubes is written and maintained by Stefan Urbanek (@Stiivi on Twitter)
-<stefan.urbanek@gmail.com> and various contributors. See AUTHORS file for more 
-information.
-
+Slicer needs to be running if you want to use Django.
 
 License
 =======
