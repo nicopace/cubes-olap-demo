@@ -1,0 +1,16 @@
+Django==1.3
+Flask==0.10.1
+Jinja2==2.7.2
+MarkupSafe==0.21
+SQLAlchemy==0.9.4
+Werkzeug==0.9.4
+argparse==1.2.1
+cubes==0.10.2
+django-piston==0.2.3
+itsdangerous==0.24
+jsonschema==2.3.0
+python-dateutil==2.2
+pytz==2014.2
+requests==2.2.1
+six==1.6.1
+wsgiref==0.1.2

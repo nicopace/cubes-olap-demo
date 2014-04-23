@@ -1,0 +1,333 @@
+#!/usr/bin/env python
+
+"""Slicer tool
+
+    For more information run: slicer --help
+
+    Author: Stefan Urbanek <stefan.urbanek@gmail.com>
+    Date: 2011-01
+"""
+
+import json
+import argparse
+import sys
+import cubes
+import cubes.server
+import ConfigParser
+import shlex
+from cubes.common import MissingPackageError, create_logger
+from cubes.errors import CubesError
+
+def validate_model(args):
+    """docstring for validate_model"""
+    print("loading model %s" % args.model)
+
+    try:
+        model = cubes.load_model(args.model)
+    except cubes.ModelError as e:
+        print("error: model loading failed because of model file error: %s" % e)
+        exit(1)
+
+    if args.translation:
+        print("translating using %s" % args.translation)
+        handle = open(args.translation)
+        translation = json.load(handle)
+        handle.close
+        model.localize(translation)
+    print("model locale: %s" % model.locale)
+
+
+    print("-------------------------")
+    print("cubes: %d" % len(model.cubes))
+    for cube_name, cube in model.cubes.items():
+        print("    %s" % cube_name)
+
+    print("dimensions: %d" % len(model.dimensions))
+    for dim in model.dimensions:
+        print("    %s" % dim.name)
+
+    print("-------------------------")
+    error_count = 0
+    warning_count = 0
+    default_count = 0
+    try:
+        results = model.validate()
+    except CubesError as e:
+        results = [["error", "Can not validate model: %s" % str(e)]]
+    show_warnings = args.show_warnings
+    show_defaults = args.show_defaults
+
+    if not results:
+        print("model is valid")
+    else:
+        print("\nvalidation results:\n")
+        for result in results:
+            display = True
+            if result[0] == "error":
+                error_count += 1
+            elif result[0] == "warning":
+                warning_count += 1
+                display = show_warnings
+            elif result[0] == "default":
+                display = show_defaults
+                default_count += 1
+            if display:
+                print("%s: %s" % result)
+
+    if error_count == 0:
+        if warning_count == 0:
+            if default_count == 0:
+                message = "model can be used"
+            else:
+                message = "model can be used, make sure that defaults reflect reality"
+        else:
+            message = "not recommended to use the model, some issues might emerge"
+    else:
+        message = "model can not be used"
+
+    print("\ndefaults used: %d" % default_count)
+    print("%d errors, %d warnings: %s" % (error_count, warning_count, message))
+    if error_count > 0:
+        exit(1)
+
+def model_to_json(args):
+    """docstring for validate_model"""
+    model = cubes.model_from_path(args.model)
+    dump_model(model)
+
+def update_locale(args):
+    raise NotImplementedError("update of localizable dictionary is not yet implemented")
+
+def extract_locale(args):
+    """docstring for validate_model"""
+    model = cubes.model_from_path(args.model)
+    print json.dumps(model.localizable_dictionary())
+
+def translate_model(args):
+    model = cubes.model_from_path(args.model)
+    trans_path = args.translation
+    handle = open(trans_path)
+    trans_dict = json.load(handle)
+    handle.close()
+
+    model.localize(trans_dict)
+    dump_model(model)
+
+def dump_model(model):
+    print json.dumps(model.to_dict())
+
+def read_config(cfg):
+    """Read the configuration file."""
+    config = ConfigParser.SafeConfigParser()
+    try:
+        config.read(args.config)
+    except Exception as e:
+        raise Exception("Unable to load config: %s" % e)
+
+    return config
+
+def generate_ddl(args):
+    model = cubes.load_model(args.model)
+
+    if args.backend:
+        backend = cubes.workspace.get_backend(args.backend)
+    else:
+        backend = cubes.backends.sql.browser
+
+    ddl = backend.ddl_for_model(args.url, model, fact_prefix=args.fact_prefix, 
+                        dimension_prefix=args.dimension_prefix)
+
+    print ddl
+
+def run_server(args):
+    """Run Slicer HTTP server."""
+    config = read_config(args.config)
+
+    # Load extensions
+
+    if config.has_option("server", "modules"):
+        modules = shlex.split(config.get("server", "modules"))
+        for module in modules:
+            e = __import__(module)
+
+    cubes.server.run_server(config)
+
+def run_test(args):
+    """Run test of Slicer HTTP server configuration."""
+    config = read_config(args.config)
+
+    # FIXME: this should be in "workspace"
+    if config.has_option("server", "log_level"):
+        create_logger(config.get("server", "log_level"))
+
+    # Load extensions
+    if config.has_option("server", "modules"):
+        modules = shlex.split(config.get("server", "modules"))
+        for module in modules:
+            e = __import__(module)
+
+    workspace = cubes.create_workspace_from_config(config)
+
+    results = workspace.validate_model()
+    if results:
+        print("\nvalidation results:\n")
+        for result in results:
+            print("%s: %s" % (result[0], result[1]) )
+    else:
+        print("model test was successful")
+
+def denormalize(args):
+    cube_list = args.cube
+    config = read_config(args.config)
+
+    workspace = cubes.create_workspace_from_config(config)
+    model = workspace.model
+
+    if not cube_list:
+        cube_list = [cube.name for cube in model.cubes.values()]
+
+    view_schema = args.schema # or workspace.options.get("denormalized_view_schema")
+    view_prefix = args.prefix or workspace.options.get("denormalized_view_prefix")
+
+    for cube_name in cube_list:
+        cube = model.cube(cube_name)
+
+        view_name = view_prefix + cube_name if view_prefix else cube_name
+
+        print("denormalizing cube '%s' into '%s'" % (cube_name, view_name))
+
+        workspace.create_denormalized_view(cube, view_name,
+                                            materialize=args.materialize,
+                                            replace=args.replace,
+                                            create_index=args.index,
+                                            keys_only=False,
+                                            schema=view_schema)
+
+################################################################################
+# Main code
+
+parser = argparse.ArgumentParser(description='Cubes tool')
+subparsers = parser.add_subparsers(title='commands')
+
+################################################################################
+# Command: valdate_model
+
+model_parser = subparsers.add_parser('model', help="logical model validation, translation, conversion")
+model_subparsers = model_parser.add_subparsers(title='model commands',
+                            help='additional model help')
+
+parser_validate = model_subparsers.add_parser('validate',
+                            help="validate model and print validation report")
+
+parser_validate.add_argument('-d', '--defaults',
+                            dest='show_defaults', action='store_true', default=False,
+                            help='show defaults')
+parser_validate.add_argument('-w', '--no-warnings',
+                            dest='show_warnings', action='store_false', default=True,
+                            help='disable warnings')
+parser_validate.add_argument('-t', '--translation',
+                            dest='translation',
+                            help='model translation file')
+parser_validate.add_argument('model', help='model reference - can be a local file path or URL')
+parser_validate.set_defaults(func=validate_model)
+
+
+################################################################################
+# Command: translate_model
+
+subparser = model_subparsers.add_parser('translate', help="translate model")
+subparser.add_argument('model', help='model file or URL')
+subparser.add_argument('translation', help='translation file or URL')
+subparser.set_defaults(func=translate_model)
+
+################################################################################
+# Command: model_to_json
+
+subparser = model_subparsers.add_parser('json')
+subparser.add_argument('model', help='model reference - can be a local file path or URL')
+subparser.set_defaults(func=model_to_json)
+
+################################################################################
+# Command: extract_locale
+
+subparser = model_subparsers.add_parser('extract_locale', help="extract model localization dictionary")
+subparser.add_argument('model', help='model reference - can be a local file path or URL')
+subparser.set_defaults(func=extract_locale)
+
+################################################################################
+# Command: update_locale
+
+subparser = model_subparsers.add_parser('update_locale', help="update model localization dictionary")
+subparser.add_argument('model', help='model reference - can be a local file path or URL')
+subparser.add_argument('translation', help='translation file or URL')
+subparser.set_defaults(func=update_locale)
+
+################################################################################
+# Command: serve
+
+parser_serve = subparsers.add_parser('serve', help="run slicer server")
+parser_serve.add_argument('config', help='server confuguration .ini file')
+parser_serve.set_defaults(func=run_server)
+
+################################################################################
+# Command: serve
+
+subparser = subparsers.add_parser('test', help="test the configuration and model with backend")
+subparser.add_argument('config', help='server confuguration .ini file')
+subparser.set_defaults(func=run_test)
+
+################################################################################
+# Command: denormalize
+
+subparser = subparsers.add_parser('denormalize',
+                                  help="create denormalized view(s) using SQL star backend")
+subparser.add_argument('config', help='slicer confuguration .ini file')
+subparser.add_argument('-p', '--prefix',
+                            dest='prefix',
+                            help='prefix for denormalized views (overrides config value)')
+subparser.add_argument('-f', '--force',
+                            dest='replace', action='store_true', default=False,
+                            help='replace existing views')
+subparser.add_argument('-m', '--materialize',
+                            dest='materialize', action='store_true', default=False,
+                            help='create materialized view (table)')
+subparser.add_argument('-i', '--index',
+                            dest='index', action='store_true', default=False,
+                            help='create index for key attributes')
+subparser.add_argument('-s', '--schema',
+                            dest='schema',
+                            help='target view schema (overrides config value)')
+subparser.add_argument('-c', '--cube',
+                            dest='cube', action='append',
+                            help='cube(s) to be denormalized, if not specified then all in the model')
+subparser.set_defaults(func=denormalize)
+
+################################################################################
+# Command: ddl
+
+subparser = subparsers.add_parser('ddl', help="generate DDL of star schema, based on logical model (works only for SQL backend)")
+subparser.add_argument('url', help='SQL database connection URL')
+subparser.add_argument('model', help='model reference - can be a local file path or URL')
+subparser.add_argument('--dimension-prefix',
+                            dest='dimension_prefix',
+                            help='prefix for dimension tables')
+subparser.add_argument('--fact-prefix',
+                            dest='fact_prefix',
+                            default="",
+                            help='prefix for fact tables')
+subparser.add_argument('--backend',
+                            dest='backend',
+                            help='backend name (currently limited only to SQL backends)')
+subparser.set_defaults(func=generate_ddl)
+
+args = parser.parse_args(sys.argv[1:])
+
+try:
+    args.func(args)
+except CubesError as e:
+    sys.stderr.write("ERROR: %s\n" % e)
+    exit(1)
+except MissingPackageError as e:
+    sys.stderr.write("MISSING PACKAGE ERROR: %s\n" % e)
+    exit(2)
+
